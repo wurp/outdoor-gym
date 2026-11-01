@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.vibedev.app.gyms.GeoPoint
 import com.vibedev.app.gyms.Gym
+import com.vibedev.app.gyms.GymMark
 import com.vibedev.app.gyms.SearchArea
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -19,6 +20,7 @@ fun GymMap(
     area: SearchArea?,
     gyms: List<Gym>,
     myLocation: GeoPoint?,
+    markOf: (Gym) -> GymMark?,
     onGymTapped: (Gym) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -37,6 +39,9 @@ fun GymMap(
                     position = gym.location.toOsm()
                     title = gym.name
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                    markerColor(markOf(gym))?.let { color ->
+                        icon = icon.mutate().apply { setTint(color) }
+                    }
                     setOnMarkerClickListener { _, _ -> onGymTapped(gym); true }
                 }
             }
@@ -64,6 +69,13 @@ private fun createMapView(context: Context): MapView {
         setMultiTouchControls(true)
         zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
     }
+}
+
+/** Gold for favorites, grey for "do not use", default blue otherwise. */
+private fun markerColor(mark: GymMark?): Int? = when (mark) {
+    GymMark.FAVORITE -> 0xFFFFB300.toInt()
+    GymMark.AVOID -> 0xFF9E9E9E.toInt()
+    null -> null
 }
 
 private fun zoomFor(radiusMeters: Int): Double = when {

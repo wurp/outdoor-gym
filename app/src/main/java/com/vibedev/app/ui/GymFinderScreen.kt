@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -41,6 +44,8 @@ import androidx.core.content.ContextCompat
 import com.vibedev.app.LocationFinder
 import com.vibedev.app.MapsLauncher
 import com.vibedev.app.gyms.Gym
+import com.vibedev.app.gyms.GymMark
+import com.vibedev.app.gyms.SharedPrefsGymMarkStore
 import com.vibedev.app.gyms.OverpassGymSource
 import com.vibedev.app.gyms.SearchArea
 import kotlinx.coroutines.launch
@@ -49,7 +54,10 @@ import kotlinx.coroutines.launch
 fun GymFinderScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val state = remember { GymFinderState(OverpassGymSource(userAgent = context.packageName)) }
+    val state = remember { GymFinderState(
+            source = OverpassGymSource(userAgent = context.packageName),
+            markStore = SharedPrefsGymMarkStore(context),
+        ) }
     val locationFinder = remember { LocationFinder(context) }
     var showMap by rememberSaveable { mutableStateOf(true) }
 
@@ -101,6 +109,21 @@ fun GymFinderScreen(modifier: Modifier = Modifier) {
                     )
                 }
             }
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(
+                    selected = state.favoritesOnly,
+                    onClick = { state.favoritesOnly = !state.favoritesOnly },
+                    label = { Text("★ Favorites only") },
+                )
+                FilterChip(
+                    selected = state.showAvoided,
+                    onClick = { state.showAvoided = !state.showAvoided },
+                    label = { Text("Show \"do not use\" (${state.avoidedCount})") },
+                )
+            }
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 SegmentedButton(
                     selected = showMap,
@@ -120,14 +143,17 @@ fun GymFinderScreen(modifier: Modifier = Modifier) {
             if (showMap) {
                 GymMap(
                     area = state.area,
-                    gyms = state.gyms,
+                    gyms = state.visibleGyms,
                     myLocation = state.myLocation,
+                    markOf = state::markOf,
                     onGymTapped = { state.selected = it },
                     modifier = Modifier.fillMaxSize(),
                 )
                 state.selected?.let { gym ->
                     SelectedGymCard(
                         gym = gym,
+                        mark = state.markOf(gym),
+                        onToggle = { state.toggle(gym, it) },
                         distance = state.origin?.let { formatDistance(gym.location.distanceMetersTo(it)) },
                         onNavigate = { MapsLauncher.navigateTo(context, gym) },
                         onClose = { state.selected = null },
@@ -153,7 +179,7 @@ private fun StatusLine(state: GymFinderState) {
         state.loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
         state.error != null -> Text(state.error!!, color = MaterialTheme.colorScheme.error)
         state.area != null -> Text(
-            "${state.gyms.size} spots found in ${state.area!!.label}",
+            "${state.visibleGyms.size} spots in ${state.area!!.label}",
             style = MaterialTheme.typography.bodyMedium,
         )
     }
@@ -162,6 +188,8 @@ private fun StatusLine(state: GymFinderState) {
 @Composable
 private fun SelectedGymCard(
     gym: Gym,
+    mark: GymMark?,
+    onToggle: (GymMark) -> Unit,
     distance: String?,
     onNavigate: () -> Unit,
     onClose: () -> Unit,
@@ -170,11 +198,12 @@ private fun SelectedGymCard(
     Card(modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(gym.name, style = MaterialTheme.typography.titleMedium)
-            Text(listOfNotNull(gym.kind.label, distance).joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
+            Text(listOfNotNull(markLabel(mark), gym.kind.label, distance).joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onNavigate) { Text("Navigate in Google Maps") }
                 TextButton(onClick = onClose) { Text("Close") }
             }
+            MarkButtons(mark, onToggle)
         }
     }
 }
@@ -183,7 +212,8 @@ private fun SelectedGymCard(
 private fun GymList(state: GymFinderState, onNavigate: (Gym) -> Unit) {
     val origin = state.origin
     LazyColumn(Modifier.fillMaxSize()) {
-        items(state.gymsByDistance, key = { it.id }) { gym ->
+        items(state.visibleGyms, key = { it.id }) { gym ->
+            val mark = state.markOf(gym)
             Row(
                 Modifier.fillMaxWidth().clickable { onNavigate(gym) }.padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -191,14 +221,38 @@ private fun GymList(state: GymFinderState, onNavigate: (Gym) -> Unit) {
                 Column(Modifier.weight(1f)) {
                     Text(gym.name, style = MaterialTheme.typography.titleSmall)
                     Text(
-                        listOfNotNull(gym.kind.label, origin?.let { formatDistance(gym.location.distanceMetersTo(it)) })
+                        listOfNotNull(markLabel(mark), gym.kind.label, origin?.let { formatDistance(gym.location.distanceMetersTo(it)) })
                             .joinToString(" · "),
                         style = MaterialTheme.typography.bodySmall,
                     )
+                }
+                TextButton(onClick = { state.toggle(gym, GymMark.FAVORITE) }) {
+                    Text(if (mark == GymMark.FAVORITE) "★" else "☆", style = MaterialTheme.typography.titleLarge)
+                }
+                TextButton(onClick = { state.toggle(gym, GymMark.AVOID) }) {
+                    Text(if (mark == GymMark.AVOID) "Use" else "Hide")
                 }
                 TextButton(onClick = { onNavigate(gym) }) { Text("Go") }
             }
             HorizontalDivider()
         }
     }
+}
+
+@Composable
+private fun MarkButtons(mark: GymMark?, onToggle: (GymMark) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { onToggle(GymMark.FAVORITE) }) {
+            Text(if (mark == GymMark.FAVORITE) "★ Unfavorite" else "☆ Favorite")
+        }
+        OutlinedButton(onClick = { onToggle(GymMark.AVOID) }) {
+            Text(if (mark == GymMark.AVOID) "Use again" else "Do not use")
+        }
+    }
+}
+
+private fun markLabel(mark: GymMark?): String? = when (mark) {
+    GymMark.FAVORITE -> "★ Favorite"
+    GymMark.AVOID -> "Do not use"
+    null -> null
 }
