@@ -72,7 +72,7 @@ class GymFinderState(
             found = source.findGyms(newArea)
         } catch (e: Exception) {
             found = emptyList()
-            error = "Couldn't load gyms. Check your internet and try again."
+            error = "Couldn't load gyms. Tap the area again to retry.\nDetails: ${e.message}"
         } finally {
             loading = false
         }

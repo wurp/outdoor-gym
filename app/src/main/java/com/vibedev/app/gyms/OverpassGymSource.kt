@@ -10,11 +10,25 @@ import java.net.URLEncoder
 /** Finds outdoor gyms and calisthenics parks in OpenStreetMap (free, no account). */
 class OverpassGymSource(
     private val userAgent: String,
-    private val endpoint: String = "https://overpass-api.de/api/interpreter",
+    private val endpoint: String,
 ) : GymSource {
 
+    companion object {
+        /** Public copies of the same OpenStreetMap database, tried in order. */
+        val PUBLIC_ENDPOINTS = listOf(
+            "https://overpass-api.de/api/interpreter",
+            "https://overpass.private.coffee/api/interpreter",
+            "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+            "https://overpass.kumi.systems/api/interpreter",
+        )
+    }
+
     override suspend fun findGyms(area: SearchArea): List<Gym> = withContext(Dispatchers.IO) {
-        parse(download(query(area)))
+        try {
+            parse(download(query(area)))
+        } catch (e: Exception) {
+            throw IllegalStateException("${URL(endpoint).host}: ${e.message ?: e.javaClass.simpleName}", e)
+        }
     }
 
     private fun query(area: SearchArea): String {
@@ -38,9 +52,10 @@ class OverpassGymSource(
             conn.connectTimeout = 15_000
             conn.readTimeout = 30_000
             conn.setRequestProperty("User-Agent", userAgent)
+            conn.setRequestProperty("Accept", "application/json")
             conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
             conn.outputStream.use { it.write("data=${URLEncoder.encode(query, "UTF-8")}".toByteArray()) }
-            if (conn.responseCode != 200) error("Map server answered ${conn.responseCode}")
+            if (conn.responseCode != 200) error("${URL(endpoint).host} answered ${conn.responseCode}")
             return conn.inputStream.bufferedReader().use { it.readText() }
         } finally {
             conn.disconnect()

@@ -46,16 +46,21 @@ import com.vibedev.app.MapsLauncher
 import com.vibedev.app.gyms.Gym
 import com.vibedev.app.gyms.GymMark
 import com.vibedev.app.gyms.SharedPrefsGymMarkStore
+import com.vibedev.app.gyms.FallbackGymSource
 import com.vibedev.app.gyms.OverpassGymSource
 import com.vibedev.app.gyms.SearchArea
 import kotlinx.coroutines.launch
+
+private const val USER_AGENT = "OutdoorGym/1.0 (Android; +https://github.com/wurp/outdoor-gym)"
 
 @Composable
 fun GymFinderScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val state = remember { GymFinderState(
-            source = OverpassGymSource(userAgent = context.packageName),
+            source = FallbackGymSource(
+                OverpassGymSource.PUBLIC_ENDPOINTS.map { OverpassGymSource(userAgent = USER_AGENT, endpoint = it) },
+            ),
             markStore = SharedPrefsGymMarkStore(context),
         ) }
     val locationFinder = remember { LocationFinder(context) }
