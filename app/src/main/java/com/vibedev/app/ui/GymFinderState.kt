@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.vibedev.app.gyms.GeoPoint
 import com.vibedev.app.gyms.Gym
+import com.vibedev.app.gyms.GymCache
 import com.vibedev.app.gyms.GymMark
 import com.vibedev.app.gyms.GymMarkStore
 import com.vibedev.app.gyms.GymSource
@@ -14,12 +15,14 @@ import com.vibedev.app.gyms.SearchArea
 /** Holds what the gym finder screen shows. Knows nothing about Android views. */
 class GymFinderState(
     private val source: GymSource,
+    private val cache: GymCache,
     private val markStore: GymMarkStore,
 ) {
     var area by mutableStateOf<SearchArea?>(null); private set
     var myLocation by mutableStateOf<GeoPoint?>(null)
     var loading by mutableStateOf(false); private set
     var error by mutableStateOf<String?>(null); private set
+    var showingSaved by mutableStateOf(false); private set
     var selected by mutableStateOf<Gym?>(null)
     var showAvoided by mutableStateOf(false)
     var favoritesOnly by mutableStateOf(false)
@@ -63,16 +66,22 @@ class GymFinderState(
         if (newMark == GymMark.AVOID && !showAvoided) selected = null
     }
 
+    /** Shows saved results right away, then replaces them with fresh ones when they arrive. */
     suspend fun search(newArea: SearchArea) {
         area = newArea
         selected = null
-        loading = true
         error = null
+        val saved = cache.load(newArea)
+        found = saved ?: emptyList()
+        showingSaved = saved != null
+        loading = true
         try {
-            found = source.findGyms(newArea)
+            found = source.findGyms(newArea).also { cache.save(newArea, it) }
+            showingSaved = false
         } catch (e: Exception) {
-            found = emptyList()
-            error = "Couldn't load gyms. Tap the area again to retry.\nDetails: ${e.message}"
+            if (saved == null) {
+                error = "Couldn't load gyms. Tap the area again to retry.\nDetails: ${e.message}"
+            }
         } finally {
             loading = false
         }
