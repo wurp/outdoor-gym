@@ -6,6 +6,8 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.util.Locale
+import kotlin.math.cos
 
 /** Finds outdoor gyms and calisthenics parks in OpenStreetMap (free, no account). */
 class OverpassGymSource(
@@ -31,16 +33,25 @@ class OverpassGymSource(
         }
     }
 
+    /**
+     * A box search on two narrow tags. Box searches are much faster than circle
+     * searches, and a bare "sport=calisthenics" tag makes servers scan everything.
+     */
     private fun query(area: SearchArea): String {
-        val around = "(around:${area.radiusMeters},${area.center.lat},${area.center.lon})"
+        val dLat = area.radiusMeters / 111_320.0
+        val dLon = dLat / cos(Math.toRadians(area.center.lat))
+        val bbox = "%.5f,%.5f,%.5f,%.5f".format(
+            Locale.US,
+            area.center.lat - dLat, area.center.lon - dLon,
+            area.center.lat + dLat, area.center.lon + dLon,
+        )
         return """
-            [out:json][timeout:25];
+            [out:json][timeout:60][bbox:$bbox];
             (
-              nwr["leisure"="fitness_station"]$around;
-              nwr["sport"="calisthenics"]$around;
-              nwr["leisure"="outdoor_fitness"]$around;
+              nwr["leisure"="fitness_station"];
+              nwr["leisure"="pitch"]["sport"~"calisthenics|fitness"];
             );
-            out center 1000;
+            out center 2000;
         """.trimIndent()
     }
 
@@ -50,7 +61,7 @@ class OverpassGymSource(
             conn.requestMethod = "POST"
             conn.doOutput = true
             conn.connectTimeout = 15_000
-            conn.readTimeout = 30_000
+            conn.readTimeout = 75_000
             conn.setRequestProperty("User-Agent", userAgent)
             conn.setRequestProperty("Accept", "application/json")
             conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
@@ -71,7 +82,7 @@ class OverpassGymSource(
                 ?: if (e.has("lat")) GeoPoint(e.getDouble("lat"), e.getDouble("lon")) else null
             point ?: return@mapNotNull null
             val tags = e.optJSONObject("tags") ?: JSONObject()
-            val kind = if (tags.optString("sport").contains("calisthenics")) GymKind.CALISTHENICS else GymKind.OUTDOOR_GYM
+            val kind = if (tags.optString("sport").contains("calisthenics") || tags.optString("leisure") == "pitch") GymKind.CALISTHENICS else GymKind.OUTDOOR_GYM
             Gym(
                 id = "${e.getString("type")}/${e.getLong("id")}",
                 name = tags.optString("name").ifBlank { kind.label },

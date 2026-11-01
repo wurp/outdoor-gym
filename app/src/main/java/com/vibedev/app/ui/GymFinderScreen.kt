@@ -46,6 +46,7 @@ import com.vibedev.app.MapsLauncher
 import com.vibedev.app.gyms.Gym
 import com.vibedev.app.gyms.GymMark
 import com.vibedev.app.gyms.SharedPrefsGymMarkStore
+import com.vibedev.app.gyms.CachingGymSource
 import com.vibedev.app.gyms.FallbackGymSource
 import com.vibedev.app.gyms.OverpassGymSource
 import com.vibedev.app.gyms.SearchArea
@@ -58,8 +59,11 @@ fun GymFinderScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val state = remember { GymFinderState(
-            source = FallbackGymSource(
-                OverpassGymSource.PUBLIC_ENDPOINTS.map { OverpassGymSource(userAgent = USER_AGENT, endpoint = it) },
+            source = CachingGymSource(
+                FallbackGymSource(
+                    OverpassGymSource.PUBLIC_ENDPOINTS.map { OverpassGymSource(userAgent = USER_AGENT, endpoint = it) },
+                ),
+                context,
             ),
             markStore = SharedPrefsGymMarkStore(context),
         ) }
@@ -181,7 +185,10 @@ fun GymFinderScreen(modifier: Modifier = Modifier) {
 @Composable
 private fun StatusLine(state: GymFinderState) {
     when {
-        state.loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
+        state.loading -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+            Text("Searching for gyms… this can take up to a minute.", style = MaterialTheme.typography.bodySmall)
+        }
         state.error != null -> Text(state.error!!, color = MaterialTheme.colorScheme.error)
         state.area != null -> Text(
             "${state.visibleGyms.size} spots in ${state.area!!.label}",
