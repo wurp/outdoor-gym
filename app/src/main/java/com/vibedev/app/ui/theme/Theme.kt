@@ -12,10 +12,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 // The app's main color. Change it to restyle the whole app.
-private val Brand = Color(0xFF6750A4)
+private val Brand = Color(0xFF2E7D32)
 
 private val LightColors = lightColorScheme(primary = Brand)
-private val DarkColors = darkColorScheme(primary = Color(0xFFD0BCFF))
+private val DarkColors = darkColorScheme(primary = Color(0xFF81C784))
 
 @Composable
 fun VibeAppTheme(
