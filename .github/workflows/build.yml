@@ -1,0 +1,54 @@
+# Builds a test version of the app on every push and publishes it at a fixed link:
+#   https://github.com/<owner>/<repo>/releases/download/test-build/app.apk
+# Only the newest build is kept. Nothing needs merging.
+name: Build test app
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+# A newer push cancels a build that's still running.
+concurrency:
+  group: test-build
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - name: Build test APK
+        run: ./gradlew assembleDebug -PversionCode=${{ github.run_number }} --console=plain
+
+      - name: Publish as the latest test build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk app.apk
+          notes="Test build ${{ github.run_number }} from branch \`${GITHUB_REF_NAME}\`, commit ${GITHUB_SHA::7}, built $(date -u '+%Y-%m-%d %H:%M UTC')."
+          gh release delete test-build --cleanup-tag --yes 2>/dev/null || true
+          gh release create test-build app.apk \
+            --target "$GITHUB_SHA" \
+            --prerelease --latest=false \
+            --title "Latest test build" \
+            --notes "$notes"
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/test-build/app.apk"
+          echo "Download: $url"
+          {
+            echo "### Test build ${{ github.run_number }} is ready"
+            echo
+            echo "[Download app.apk]($url)"
+          } >> "$GITHUB_STEP_SUMMARY"

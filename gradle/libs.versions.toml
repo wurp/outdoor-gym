@@ -1,0 +1,28 @@
+[versions]
+# AGP 8.13 is the newest line that works with Gradle 8.14.3, which is what
+# Claude Code cloud sessions have preinstalled. AGP 9 needs Gradle 9.
+#
+# Library versions are held back to match: androidx core 1.19+, Compose 1.12+
+# (BOM 2026.08.00+), and lifecycle 2.11+ require AGP 9.1 and compileSdk 37.
+# Don't upgrade them until the whole project moves to AGP 9 / Gradle 9.
+agp = "8.13.2"
+kotlin = "2.4.21"
+composeBom = "2026.06.01"
+coreKtx = "1.18.0"
+activityCompose = "1.12.4"
+lifecycle = "2.10.0"
+
+[libraries]
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
